@@ -11,7 +11,9 @@
     "dev:server": "tsx src/server.ts",
     "dev:scrape": "tsx src/scrape.ts",
     "dev:mcp": "tsx src/mcp.ts",
+    "dev:mcp-http": "tsx src/mcp-http.ts",
     "mcp": "node dist/mcp.js",
+    "mcp-http": "node dist/mcp-http.js",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"

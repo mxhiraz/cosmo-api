@@ -18,7 +18,7 @@ RUN npm prune --omit=dev
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-ENV PORT=7070
+ENV MCP_PORT=7070
 
 # non-root user
 RUN addgroup -S app && adduser -S app -G app
@@ -30,5 +30,5 @@ COPY package.json ./
 USER app
 EXPOSE 7070
 
-# default: HTTP image-search API. (MCP server is local/stdio — run separately.)
-CMD ["node", "dist/server.js"]
+# default: URL-based MCP server (Streamable HTTP) on :7070/mcp
+CMD ["node", "dist/mcp-http.js"]

@@ -111,11 +111,95 @@ curl "http://localhost:3000/api/search?q=brutalism&limit=20"
 
 Results are cached in-memory for 5 minutes per `(query, limit)`.
 
+## MCP server (hook into an agent)
+
+Exposes Cosmos search as [Model Context Protocol](https://modelcontextprotocol.io)
+tools over stdio — usable from Claude Desktop, Claude Code, or any MCP client.
+
+Tools: `cosmos_search`, `cosmos_featured`, `cosmos_download`.
+
+Run directly:
+
+```bash
+npx tsx src/mcp.ts        # dev
+npm run build && npm run mcp   # built
+```
+
+Register it (e.g. Claude Desktop `claude_desktop_config.json`, or Claude Code
+`.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "cosmos": {
+      "command": "node",
+      "args": ["/absolute/path/to/cosmo-api/dist/mcp.js"]
+    }
+  }
+}
+```
+
+Then the agent can call e.g. `cosmos_search({ query: "brutalist interiors", limit: 30 })`.
+
+### URL-based MCP (remote, hook any client)
+
+`src/mcp-http.ts` serves MCP over **Streamable HTTP** at a single URL — point any
+remote MCP client at it, no subprocess needed. Stateless, so it scales behind a
+load balancer / Azure.
+
+```bash
+npx tsx src/mcp-http.ts          # dev  -> http://localhost:7070/mcp
+npm run build && npm run mcp-http # built
+```
+
+Hook into an agent:
+
+```json
+{
+  "mcpServers": {
+    "cosmos": { "type": "http", "url": "https://your-host:7070/mcp" }
+  }
+}
+```
+
+Env: `MCP_PORT` (default 7070), `MCP_TOKEN` (optional — if set, clients must send
+`Authorization: Bearer <token>`).
+
+## Docker / Azure deploy
+
+The image runs the **HTTP API** (port 7070).
+
+```bash
+docker build -t cosmo-api .
+docker run -p 7070:7070 cosmo-api
+# override config:
+docker run -p 8080:8080 -e PORT=8080 -e DEFAULT_LIMIT=40 cosmo-api
+```
+
+Deploy to Azure (Container Registry + Web App for Containers):
+
+```bash
+# 1. push to ACR
+az acr login --name <registry>
+docker tag cosmo-api <registry>.azurecr.io/cosmo-api:latest
+docker push <registry>.azurecr.io/cosmo-api:latest
+
+# 2. run as a Web App for Containers (or Azure Container Apps)
+az webapp create -g <rg> -p <plan> -n <app-name> \
+  --deployment-container-image-name <registry>.azurecr.io/cosmo-api:latest
+az webapp config appsettings set -g <rg> -n <app-name> \
+  --settings PORT=7070 WEBSITES_PORT=7070
+```
+
+> Azure routes to the port in `WEBSITES_PORT` — set it to match `PORT`.
+
 ## Files
 
 - `src/cosmos.ts` — GraphQL client: `searchPage`, `searchAll`, `featuredPage`, `cdnUrl`.
 - `src/scrape.ts` — CLI scraper → JSON + image files.
 - `src/server.ts` — Express image-search API.
+- `src/mcp.ts` — MCP server (agent tools over stdio).
+- `Dockerfile` — multi-stage build, runs the HTTP API.
 
 ## Ideas to extend
 

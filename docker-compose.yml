@@ -1,0 +1,17 @@
+services:
+  # URL-based MCP server (Streamable HTTP) — hook any remote agent at http://host:7070/mcp
+  mcp:
+    build: .
+    image: cosmo-api:latest
+    command: ["node", "dist/mcp-http.js"]
+    ports:
+      - "${MCP_PORT:-7070}:7070"
+    environment:
+      MCP_PORT: 7070
+      MCP_TOKEN: ${MCP_TOKEN:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7070/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

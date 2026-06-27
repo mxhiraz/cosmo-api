@@ -13,13 +13,12 @@
  */
 import "dotenv/config";
 import express from "express";
-import { searchAll, featuredPage, cdnUrl, type CosmosElement } from "./cosmos.js";
+import { searchAll, featuredPage, type CosmosElement } from "./cosmos.js";
 
 const PORT = Number(process.env.PORT ?? 7070);
 const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS ?? 5 * 60 * 1000);
 const MAX_LIMIT = Number(process.env.MAX_LIMIT ?? 500);
 const DEFAULT_LIMIT = Number(process.env.DEFAULT_LIMIT ?? 60);
-const DEFAULT_WIDTH = Number(process.env.DEFAULT_WIDTH ?? 800);
 
 interface CacheEntry {
   at: number;
@@ -37,13 +36,11 @@ function cached<T>(key: string): T | null {
   return e.data as T;
 }
 
-function shape(el: CosmosElement, width: number) {
+function shape(el: CosmosElement) {
   return {
     id: el.id,
     type: el.type,
-    url: el.url,
-    thumb: el.url ? cdnUrl(el.url, { width, format: "webp", quality: 80 }) : null,
-    full: el.url ? cdnUrl(el.url, { format: "webp", quality: 90 }) : null,
+    url: el.url, // original full-resolution master (default)
     width: el.width,
     height: el.height,
     blurHash: el.blurHash,
@@ -67,11 +64,13 @@ app.get("/api/search", async (req, res) => {
     return;
   }
   const limit = Math.min(Number(req.query.limit ?? DEFAULT_LIMIT) || DEFAULT_LIMIT, MAX_LIMIT);
-  const width = Math.min(Number(req.query.width ?? DEFAULT_WIDTH) || DEFAULT_WIDTH, 2000);
+  // ?fresh=1 (or nocache=1) bypasses the in-memory cache and re-fetches from upstream
+  const fresh = ["1", "true", "yes"].includes(String(req.query.fresh ?? req.query.nocache ?? "").toLowerCase());
   const key = `search:${q}:${limit}`;
 
   try {
-    let elements = cached<CosmosElement[]>(key);
+    let elements = fresh ? null : cached<CosmosElement[]>(key);
+    let cacheHit = !!elements;
     if (!elements) {
       elements = await searchAll(q, limit);
       cache.set(key, { at: Date.now(), data: elements });
@@ -79,7 +78,8 @@ app.get("/api/search", async (req, res) => {
     res.json({
       query: q,
       count: elements.length,
-      results: elements.map((el) => shape(el, width)),
+      cached: cacheHit,
+      results: elements.map(shape),
     });
   } catch (err) {
     res.status(502).json({ error: "upstream failed", detail: String(err) });
@@ -88,12 +88,11 @@ app.get("/api/search", async (req, res) => {
 
 app.get("/api/featured", async (req, res) => {
   const limit = Math.min(Number(req.query.limit ?? 40) || 40, 100);
-  const width = Math.min(Number(req.query.width ?? DEFAULT_WIDTH) || DEFAULT_WIDTH, 2000);
   try {
     const page = await featuredPage();
     res.json({
       count: Math.min(page.items.length, limit),
-      results: page.items.slice(0, limit).map((el) => shape(el, width)),
+      results: page.items.slice(0, limit).map(shape),
     });
   } catch (err) {
     res.status(502).json({ error: "upstream failed", detail: String(err) });
