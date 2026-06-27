@@ -64,19 +64,27 @@ app.get("/api/search", async (req, res) => {
     return;
   }
   const limit = Math.min(Number(req.query.limit ?? DEFAULT_LIMIT) || DEFAULT_LIMIT, MAX_LIMIT);
+  // paging: ?offset=N, or ?page=N (1-based). Cosmos caps a query at ~500 total.
+  const page = Number(req.query.page ?? 0);
+  const offset = Math.min(
+    Number(req.query.offset ?? (page > 1 ? (page - 1) * limit : 0)) || 0,
+    500,
+  );
   // ?fresh=1 (or nocache=1) bypasses the in-memory cache and re-fetches from upstream
   const fresh = ["1", "true", "yes"].includes(String(req.query.fresh ?? req.query.nocache ?? "").toLowerCase());
-  const key = `search:${q}:${limit}`;
+  const key = `search:${q}:${limit}:${offset}`;
 
   try {
     let elements = fresh ? null : cached<CosmosElement[]>(key);
     let cacheHit = !!elements;
     if (!elements) {
-      elements = await searchAll(q, limit);
+      elements = await searchAll(q, limit, offset);
       cache.set(key, { at: Date.now(), data: elements });
     }
     res.json({
       query: q,
+      offset,
+      limit,
       count: elements.length,
       cached: cacheHit,
       results: elements.map(shape),

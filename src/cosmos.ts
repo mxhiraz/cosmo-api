@@ -187,30 +187,37 @@ export async function featuredPage(pageCursor?: string | null): Promise<SearchPa
 }
 
 /**
- * Search and auto-paginate up to `limit` elements (server caps ~500/query).
- * De-dupes by id and stops on empty page or exhausted cursor.
+ * Search and auto-paginate, returning `limit` elements starting at `offset`.
+ *
+ * Cosmos's cursor is forward-only (you can't jump to "page N"), so `offset` is
+ * emulated: we walk the cursor forward, de-dupe by id, drop the first `offset`
+ * results, and keep the next `limit`. This makes skip/paging possible even
+ * though the upstream API exposes no offset arg. The server caps a query at
+ * ~500 results total, so `offset + limit` beyond that simply returns fewer.
  */
 export async function searchAll(
   searchTerm: string,
   limit = 200,
+  offset = 0,
 ): Promise<CosmosElement[]> {
-  const out: CosmosElement[] = [];
+  const target = offset + limit; // how many to walk past before we have our slice
+  const collected: CosmosElement[] = [];
   const seen = new Set<number>();
   let cursor: string | null | undefined = undefined;
 
-  while (out.length < limit) {
+  while (collected.length < target) {
     const page: SearchPage = await searchPage(searchTerm, cursor);
     if (page.items.length === 0) break;
     for (const el of page.items) {
       if (seen.has(el.id)) continue;
       seen.add(el.id);
-      out.push(el);
-      if (out.length >= limit) break;
+      collected.push(el);
+      if (collected.length >= target) break;
     }
     if (!page.nextPageCursor) break;
     cursor = page.nextPageCursor;
   }
-  return out;
+  return collected.slice(offset, offset + limit);
 }
 
 /**

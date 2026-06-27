@@ -78,10 +78,14 @@ PORT=8080 npm start              # custom port
 Endpoints:
 
 ```
-GET /api/search?q=<query>&limit=60&width=800
+GET /api/search?q=<query>&limit=60&offset=0     # or &page=2 ; &fresh=1 to bypass cache
 GET /api/featured?limit=40
 GET /healthz
 ```
+
+Paging: `offset` skips N results, or `page` (1-based, `offset=(page-1)*limit`).
+Cosmos caps a query at ~500 results; paging is emulated over a forward-only
+cursor (see HOW_IT_WAS_BUILT.md §11b).
 
 Example:
 

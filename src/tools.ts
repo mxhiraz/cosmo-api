@@ -41,8 +41,10 @@ export function registerCosmosTools(server: McpServer): void {
       description:
         "Search cosmos.so for images by a natural-language phrase (e.g. 'brutalist concrete interiors', " +
         "'wabi-sabi ceramics', 'film noir lighting'). The query is expanded semantically server-side. " +
-        "Returns a list of images with full-resolution and thumbnail URLs, dimensions, original source, " +
-        "AI caption, and permalink. Good for moodboards, visual references, and design inspiration.",
+        "Returns a list of images with full-resolution image URL, dimensions, original source, AI " +
+        "caption, and permalink. Good for moodboards, visual references, and design inspiration. " +
+        "Use `offset` (or `page`) to skip past earlier results and get the next batch — Cosmos caps a " +
+        "single query at ~500 results total.",
       inputSchema: {
         query: z.string().min(1).describe("Natural-language description of the imagery you want."),
         limit: z
@@ -51,12 +53,27 @@ export function registerCosmosTools(server: McpServer): void {
           .min(1)
           .max(MAX_LIMIT)
           .optional()
-          .describe(`Max images to return (default 20, max ${MAX_LIMIT}).`),
+          .describe(`Max images to return per call (default 20, max ${MAX_LIMIT}).`),
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .max(500)
+          .optional()
+          .describe("Skip this many results before returning (for paging). Default 0."),
+        page: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe("1-based page number; convenience alternative to offset (offset = (page-1)*limit)."),
       },
     },
-    async ({ query, limit }) => {
-      const els = await searchAll(query, limit ?? 20);
-      return asJson({ query, count: els.length, results: els.map(shape) });
+    async ({ query, limit, offset, page }) => {
+      const lim = limit ?? 20;
+      const off = offset ?? (page ? (page - 1) * lim : 0);
+      const els = await searchAll(query, lim, off);
+      return asJson({ query, offset: off, limit: lim, count: els.length, results: els.map(shape) });
     },
   );
 
